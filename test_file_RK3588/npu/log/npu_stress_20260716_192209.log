@@ -1,0 +1,67 @@
+📄 日志文件: /home/seeed/test_file_RK3588/npu/log/npu_stress_20260716_192209.log
+⚙️  并发进程: 8, 核心模式: auto, 时长: 无限
+  ✅ Worker 0 PID=35371
+  ✅ Worker 1 PID=35372
+  ✅ Worker 2 PID=35373
+  ✅ Worker 3 PID=35376
+  ✅ Worker 4 PID=35378
+  ✅ Worker 5 PID=35380
+  ✅ Worker 6 PID=35383
+  ✅ Worker 7 PID=35385
+
+📊 每秒推理统计 (Ctrl+C 停止)：
+[19:22:11] 总推理:          0 | NPU 负载: NPU load:  Core0: 57%, Core1: 52%, Core2: 42%,
+[19:22:12] 总推理:          0 | NPU 负载: NPU load:  Core0: 76%, Core1: 74%, Core2: 62%,
+[19:22:13] 总推理:          0 | NPU 负载: NPU load:  Core0: 77%, Core1: 76%, Core2: 66%,
+[19:22:14] 总推理:          0 | NPU 负载: NPU load:  Core0: 71%, Core1: 70%, Core2: 60%,
+[19:22:15] 总推理:          0 | NPU 负载: NPU load:  Core0: 77%, Core1: 71%, Core2: 60%,
+[19:22:16] 总推理:          0 | NPU 负载: NPU load:  Core0: 80%, Core1: 72%, Core2: 60%,
+[19:22:17] 总推理:          0 | NPU 负载: NPU load:  Core0: 81%, Core1: 74%, Core2: 68%,
+[19:22:18] 总推理:          0 | NPU 负载: NPU load:  Core0: 80%, Core1: 76%, Core2: 65%,
+[19:22:19] 总推理:          0 | NPU 负载: NPU load:  Core0: 76%, Core1: 72%, Core2: 61%,
+[19:22:20] 总推理:          0 | NPU 负载: NPU load:  Core0: 78%, Core1: 75%, Core2: 60%,
+[19:22:21] 总推理:          0 | NPU 负载: NPU load:  Core0: 79%, Core1: 76%, Core2: 64%,
+[19:22:22] 总推理:          0 | NPU 负载: NPU load:  Core0: 78%, Core1: 75%, Core2: 63%,
+[19:22:23] 总推理:          0 | NPU 负载: NPU load:  Core0: 82%, Core1: 74%, Core2: 62%,
+[19:22:24] 总推理:        200 | NPU 负载: NPU load:  Core0: 76%, Core1: 72%, Core2: 64%,
+[19:22:25] 总推理:        800 | NPU 负载: NPU load:  Core0: 76%, Core1: 72%, Core2: 61%,
+[19:22:26] 总推理:        800 | NPU 负载: NPU load:  Core0: 74%, Core1: 72%, Core2: 59%,
+[19:22:27] 总推理:        800 | NPU 负载: NPU load:  Core0: 86%, Core1: 79%, Core2: 69%,
+[19:22:28] 总推理:        800 | NPU 负载: NPU load:  Core0: 81%, Core1: 76%, Core2: 73%,
+[19:22:29] 总推理:        800 | NPU 负载: NPU load:  Core0: 83%, Core1: 81%, Core2: 74%,
+[19:22:30] 总推理:        800 | NPU 负载: NPU load:  Core0: 83%, Core1: 79%, Core2: 71%,
+[19:22:31] 总推理:        800 | NPU 负载: NPU load:  Core0: 85%, Core1: 79%, Core2: 71%,
+[19:22:32] 总推理:        800 | NPU 负载: NPU load:  Core0: 82%, Core1: 80%, Core2: 69%,
+[19:22:33] 总推理:        800 | NPU 负载: NPU load:  Core0: 79%, Core1: 77%, Core2: 70%,
+[19:22:34] 总推理:        800 | NPU 负载: NPU load:  Core0: 80%, Core1: 76%, Core2: 66%,
+[19:22:35] 总推理:        800 | NPU 负载: NPU load:  Core0: 81%, Core1: 78%, Core2: 70%,
+[19:22:36] 总推理:       1200 | NPU 负载: NPU load:  Core0: 81%, Core1: 79%, Core2: 70%,
+[19:22:37] 总推理:       1600 | NPU 负载: NPU load:  Core0: 79%, Core1: 76%, Core2: 65%,
+[19:22:38] 总推理:       1600 | NPU 负载: NPU load:  Core0: 83%, Core1: 80%, Core2: 67%,
+[19:22:39] 总推理:       1600 | NPU 负载: NPU load:  Core0: 84%, Core1: 79%, Core2: 71%,
+[19:22:40] 总推理:       1600 | NPU 负载: NPU load:  Core0: 84%, Core1: 76%, Core2: 70%,
+[19:22:41] 总推理:       1600 | NPU 负载: NPU load:  Core0: 82%, Core1: 78%, Core2: 69%,
+[19:22:42] 总推理:       1600 | NPU 负载: NPU load:  Core0: 84%, Core1: 82%, Core2: 68%,
+[19:22:43] 总推理:       1600 | NPU 负载: NPU load:  Core0: 84%, Core1: 80%, Core2: 67%,
+[19:22:44] 总推理:       1600 | NPU 负载: NPU load:  Core0: 83%, Core1: 79%, Core2: 74%,
+[19:22:45] 总推理:       1600 | NPU 负载: NPU load:  Core0: 84%, Core1: 78%, Core2: 67%,
+[19:22:46] 总推理:       1600 | NPU 负载: NPU load:  Core0: 81%, Core1: 79%, Core2: 69%,
+[19:22:47] 总推理:       1600 | NPU 负载: NPU load:  Core0: 78%, Core1: 75%, Core2: 64%,
+[19:22:48] 总推理:       2300 | NPU 负载: NPU load:  Core0: 83%, Core1: 80%, Core2: 69%,
+[19:22:49] 总推理:       2400 | NPU 负载: NPU load:  Core0: 80%, Core1: 76%, Core2: 65%,
+[19:22:50] 总推理:       2400 | NPU 负载: NPU load:  Core0: 85%, Core1: 83%, Core2: 71%,
+[19:22:51] 总推理:       2400 | NPU 负载: NPU load:  Core0: 82%, Core1: 78%, Core2: 70%,
+[19:22:52] 总推理:       2400 | NPU 负载: NPU load:  Core0: 78%, Core1: 76%, Core2: 63%,
+[19:22:53] 总推理:       2400 | NPU 负载: NPU load:  Core0: 83%, Core1: 78%, Core2: 69%,
+[19:22:54] 总推理:       2400 | NPU 负载: NPU load:  Core0: 78%, Core1: 75%, Core2: 70%,
+[19:22:55] 总推理:       2400 | NPU 负载: NPU load:  Core0: 82%, Core1: 81%, Core2: 72%,
+[19:22:56] 总推理:       2400 | NPU 负载: NPU load:  Core0: 80%, Core1: 74%, Core2: 62%,
+[19:22:57] 总推理:       2400 | NPU 负载: NPU load:  Core0: 74%, Core1: 73%, Core2: 63%,
+[19:22:58] 总推理:       2400 | NPU 负载: NPU load:  Core0: 75%, Core1: 70%, Core2: 56%,
+[19:22:59] 总推理:       2400 | NPU 负载: NPU load:  Core0: 80%, Core1: 73%, Core2: 63%,
+[19:23:00] 总推理:       2900 | NPU 负载: NPU load:  Core0: 78%, Core1: 76%, Core2: 64%,
+[19:23:01] 总推理:       3200 | NPU 负载: NPU load:  Core0: 83%, Core1: 80%, Core2: 67%,
+[19:23:02] 总推理:       3200 | NPU 负载: NPU load:  Core0: 79%, Core1: 76%, Core2: 68%,
+[19:23:03] 总推理:       3200 | NPU 负载: NPU load:  Core0: 83%, Core1: 81%, Core2: 72%,
+
+🛑 用户中断

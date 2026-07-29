@@ -1,0 +1,24 @@
+═══ CSI1 录屏测试 ═══
+  设备: /dev/video31
+  目标时长: 30 秒 (自动适配 → 1080p@30fps)
+  输出: ./csi_capture/csi1_video_20260720_142824.mp4
+
+./csi.sh: line 116: ./log/csi_video.log: Permission denied
+tee: ./log/csi_video.log: Permission denied
+Setting pipeline to PAUSED ...
+ERROR: from element /GstPipeline:pipeline0/GstFileSink:filesink0: Could not open file "./csi_capture/csi1_video_20260720_142824.mp4" for writing.
+Additional debug info:
+../plugins/elements/gstfilesink.c(458): gst_file_sink_open_file (): /GstPipeline:pipeline0/GstFileSink:filesink0:
+system error: Permission denied
+ERROR: pipeline doesn't want to preroll.
+ERROR: from element /GstPipeline:pipeline0/GstFileSink:filesink0: GStreamer error: state change failed and some element failed to post a proper error message with the reason for the failure.
+Additional debug info:
+../libs/gst/base/gstbasesink.c(5881): gst_base_sink_change_state (): /GstPipeline:pipeline0/GstFileSink:filesink0:
+Failed to start
+ERROR: pipeline doesn't want to preroll.
+Failed to set pipeline to PAUSED.
+Setting pipeline to NULL ...
+Freeing pipeline ...
+
+✗ 录屏失败！
+

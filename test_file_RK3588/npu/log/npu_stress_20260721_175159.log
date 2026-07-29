@@ -1,0 +1,34 @@
+📄 日志文件: /home/seeed/test_file_RK3588/npu/log/npu_stress_20260721_175159.log
+⚙️  并发进程: 8, 核心模式: auto, 时长: 无限
+  ✅ Worker 0 PID=17407
+  ✅ Worker 1 PID=17408
+  ✅ Worker 2 PID=17410
+  ✅ Worker 3 PID=17413
+  ✅ Worker 4 PID=17414
+  ✅ Worker 5 PID=17416
+  ✅ Worker 6 PID=17418
+  ✅ Worker 7 PID=17420
+
+📊 每秒推理统计 (Ctrl+C 停止)：
+[17:52:00] 总推理:          0 | NPU 负载: NPU load:  Core0:  0%, Core1:  0%, Core2:  0%,
+[17:52:01] 总推理:          0 | NPU 负载: NPU load:  Core0:  0%, Core1:  0%, Core2:  0%,
+[17:52:02] 总推理:          0 | NPU 负载: NPU load:  Core0: 74%, Core1: 70%, Core2: 61%,
+[17:52:03] 总推理:          0 | NPU 负载: NPU load:  Core0: 78%, Core1: 75%, Core2: 62%,
+[17:52:04] 总推理:          0 | NPU 负载: NPU load:  Core0: 78%, Core1: 71%, Core2: 62%,
+[17:52:05] 总推理:          0 | NPU 负载: NPU load:  Core0: 81%, Core1: 77%, Core2: 64%,
+[17:52:06] 总推理:          0 | NPU 负载: NPU load:  Core0: 85%, Core1: 79%, Core2: 69%,
+[17:52:07] 总推理:          0 | NPU 负载: NPU load:  Core0: 82%, Core1: 77%, Core2: 67%,
+[17:52:08] 总推理:          0 | NPU 负载: NPU load:  Core0: 83%, Core1: 80%, Core2: 71%,
+[17:52:09] 总推理:          0 | NPU 负载: NPU load:  Core0: 82%, Core1: 78%, Core2: 67%,
+[17:52:10] 总推理:          0 | NPU 负载: NPU load:  Core0: 85%, Core1: 80%, Core2: 72%,
+[17:52:11] 总推理:          0 | NPU 负载: NPU load:  Core0: 83%, Core1: 78%, Core2: 70%,
+[17:52:12] 总推理:          0 | NPU 负载: NPU load:  Core0: 80%, Core1: 78%, Core2: 66%,
+[17:52:13] 总推理:        500 | NPU 负载: NPU load:  Core0: 81%, Core1: 80%, Core2: 67%,
+[17:52:14] 总推理:        800 | NPU 负载: NPU load:  Core0: 83%, Core1: 81%, Core2: 68%,
+[17:52:15] 总推理:        800 | NPU 负载: NPU load:  Core0: 80%, Core1: 76%, Core2: 66%,
+[17:52:16] 总推理:        800 | NPU 负载: NPU load:  Core0: 79%, Core1: 77%, Core2: 68%,
+[17:52:17] 总推理:        800 | NPU 负载: NPU load:  Core0: 84%, Core1: 75%, Core2: 72%,
+[17:52:18] 总推理:        800 | NPU 负载: NPU load:  Core0: 79%, Core1: 76%, Core2: 67%,
+[17:52:19] 总推理:        800 | NPU 负载: NPU load:  Core0: 84%, Core1: 81%, Core2: 67%,
+
+🛑 用户中断

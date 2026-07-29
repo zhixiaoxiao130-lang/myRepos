@@ -1,0 +1,9 @@
+====== USB 测试开始 པསྱི་ལོ26ཟལ07ཚེས14ཆུ་ཚོད16ཀསར་མ19ཀསར་ཆ48 ======
+
+[1m[0;36m▌ 长时间写入稳定性测试[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;36m[i][0m 将循环写入 1GiB 文件，每个文件写完后 [1;33m自动删除[0m，不占用磁盘空间
+[0;36m[i][0m 写入过程中会显示每个文件的速度，最终统计总写入量和平均速度
+[0;36m[i][0m 可按 [1;33mCtrl+C[0m 随时停止
+
+20971520 bytes (21 MB, 20 MiB) copied, 1 s, 20.9 MB/s31457280 bytes (31 MB, 30 MiB) copied, 2 s, 14.9 MB/s37748736 bytes (38 MB, 36 MiB) copied, 3 s, 11.8 MB/s52428800 bytes (52 MB, 50 MiB) copied, 4 s, 13.0 MB/s68157440 bytes (68 MB, 65 MiB) copied, 5 s, 13.5 MB/s75497472 bytes (75 MB, 72 MiB) copied, 6 s, 12.2 MB/s83886080 bytes (84 MB, 80 MiB) copied, 7 s, 11.9 MB/s105906176 bytes (106 MB, 101 MiB) copied, 8 s, 13.2 MB/s113246208 bytes (113 MB, 108 MiB) copied, 9 s, 12.3 MB/s119537664 bytes (120 MB, 114 MiB) copied, 10 s, 11.7 MB/s138412032 bytes (138 MB, 132 MiB) copied, 11 s, 12.6 MB/s149946368 bytes (150 MB, 143 MiB) copied, 12 s, 12.4 MB/s157286400 bytes (157 MB, 150 MiB) copied, 13 s, 11.9 MB/s

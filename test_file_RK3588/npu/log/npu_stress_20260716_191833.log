@@ -1,0 +1,40 @@
+📄 日志文件: /home/seeed/test_file_RK3588/npu/log/npu_stress_20260716_191833.log
+⚙️  并发进程: 8, 核心模式: auto, 时长: 无限
+  ✅ Worker 0 PID=34022
+  ✅ Worker 1 PID=34024
+  ✅ Worker 2 PID=34026
+  ✅ Worker 3 PID=34027
+  ✅ Worker 4 PID=34030
+  ✅ Worker 5 PID=34032
+  ✅ Worker 6 PID=34034
+  ✅ Worker 7 PID=34035
+
+📊 每秒推理统计 (Ctrl+C 停止)：
+[19:18:34] 总推理:          0 | NPU 负载: NPU load:  Core0:  0%, Core1:  0%, Core2:  0%,
+[19:18:35] 总推理:          0 | NPU 负载: NPU load:  Core0: 49%, Core1: 43%, Core2: 37%,
+[19:18:36] 总推理:          0 | NPU 负载: NPU load:  Core0: 80%, Core1: 76%, Core2: 69%,
+[19:18:37] 总推理:          0 | NPU 负载: NPU load:  Core0: 71%, Core1: 69%, Core2: 58%,
+[19:18:38] 总推理:          0 | NPU 负载: NPU load:  Core0: 75%, Core1: 72%, Core2: 62%,
+[19:18:39] 总推理:          0 | NPU 负载: NPU load:  Core0: 73%, Core1: 69%, Core2: 60%,
+[19:18:40] 总推理:          0 | NPU 负载: NPU load:  Core0: 82%, Core1: 77%, Core2: 65%,
+[19:18:41] 总推理:          0 | NPU 负载: NPU load:  Core0: 81%, Core1: 76%, Core2: 67%,
+[19:18:42] 总推理:          0 | NPU 负载: NPU load:  Core0: 78%, Core1: 74%, Core2: 65%,
+[19:18:43] 总推理:          0 | NPU 负载: NPU load:  Core0: 80%, Core1: 74%, Core2: 68%,
+[19:18:44] 总推理:          0 | NPU 负载: NPU load:  Core0: 77%, Core1: 74%, Core2: 61%,
+[19:18:45] 总推理:          0 | NPU 负载: NPU load:  Core0: 84%, Core1: 79%, Core2: 73%,
+[19:18:46] 总推理:          0 | NPU 负载: NPU load:  Core0: 78%, Core1: 75%, Core2: 63%,
+[19:18:47] 总推理:          0 | NPU 负载: NPU load:  Core0: 78%, Core1: 71%, Core2: 61%,
+[19:18:48] 总推理:        800 | NPU 负载: NPU load:  Core0: 79%, Core1: 74%, Core2: 63%,
+[19:18:49] 总推理:        800 | NPU 负载: NPU load:  Core0: 73%, Core1: 71%, Core2: 61%,
+[19:18:50] 总推理:        800 | NPU 负载: NPU load:  Core0: 74%, Core1: 67%, Core2: 59%,
+[19:18:51] 总推理:        800 | NPU 负载: NPU load:  Core0: 83%, Core1: 75%, Core2: 63%,
+[19:18:52] 总推理:        800 | NPU 负载: NPU load:  Core0: 83%, Core1: 80%, Core2: 66%,
+[19:18:53] 总推理:        800 | NPU 负载: NPU load:  Core0: 84%, Core1: 85%, Core2: 77%,
+[19:18:54] 总推理:        800 | NPU 负载: NPU load:  Core0: 80%, Core1: 77%, Core2: 69%,
+[19:18:55] 总推理:        800 | NPU 负载: NPU load:  Core0: 80%, Core1: 75%, Core2: 67%,
+[19:18:56] 总推理:        800 | NPU 负载: NPU load:  Core0: 83%, Core1: 81%, Core2: 67%,
+[19:18:57] 总推理:        800 | NPU 负载: NPU load:  Core0: 84%, Core1: 77%, Core2: 72%,
+[19:18:58] 总推理:        800 | NPU 负载: NPU load:  Core0: 82%, Core1: 76%, Core2: 66%,
+[19:18:59] 总推理:        900 | NPU 负载: NPU load:  Core0: 85%, Core1: 80%, Core2: 69%,
+
+🛑 用户中断
