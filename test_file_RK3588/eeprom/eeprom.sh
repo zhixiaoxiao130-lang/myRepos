@@ -1,11 +1,13 @@
 #!/bin/bash
 # 文件名: eeprom_test.sh
-# 功能: EEPROM 读写、清空、SN 写入、只读测试（优化版）
+# 功能: EEPROM 读写、清空、SN 写入、只读测试（优化版 - 后台写保护，瞬间出菜单）
 # 特性:
+#   - 自动检测 gpioset 版本 (v1/v2)，生成正确的写保护开关命令
+#   - 使用后台持续拉低 WP 引脚，脚本启动后立刻进入菜单，无需等待
+#   - 退出时自动杀掉后台进程，恢复写保护（有外部上拉时可靠恢复高电平）
 #   - SN 写入支持合法/非法选择，非法 SN 附带精准警告（低地址风险）
 #   - 自动备份仅保留最新一份 (eeprom_backup_latest.bin)
 #   - 支持只读测试，安全查看内容
-#   - 执行前输出关键命令
 #   - 强制用户指定写入偏移，检测低地址安全区域
 #   - 增加 trap 确保 Ctrl+C 退出时也能恢复写保护
 # 用法: sudo ./eeprom_test.sh
@@ -28,30 +30,63 @@ ILLEGAL_SN="rk3576_SN00000001"
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 PASS_ICON="✅"; FAIL_ICON="❌"; WARN_ICON="⚠️"
 
+# ---------- 检测 gpioset 版本 ----------
+detect_gpio_version() {
+    if gpioset --version 2>/dev/null | head -1 | grep -q "v2"; then
+        GPIO_VERSION=2
+    else
+        GPIO_VERSION=1
+    fi
+    echo -e "${GREEN}检测到 gpioset 版本: v${GPIO_VERSION}${NC}"
+}
+detect_gpio_version
+
 # ---------- 工具函数 ----------
 die() { echo -e "${RED}${FAIL_ICON} $1${NC}"; return 1; }
 success() { echo -e "${GREEN}${PASS_ICON} $1${NC}"; }
 warn() { echo -e "${YELLOW}${WARN_ICON} $1${NC}"; }
 show_cmd() { echo -e "${YELLOW}[执行] $1${NC}"; }
 
+# ---------- 全局变量：保存后台 gpioset 进程 PID ----------
+WP_PID=""
+
+# ---------- 解除写保护（后台运行，不阻塞）----------
 wp_off() {
-    show_cmd "gpioset -m time -s 10 ${WP_GPIOCHIP} ${WP_LINE}=0"
-    if gpioset -m time -s 10 ${WP_GPIOCHIP} ${WP_LINE}=0 2>/dev/null; then
-        echo -e "${GREEN}写保护已解除${NC}"
+    # 先清理可能残留的旧进程
+    [ -n "$WP_PID" ] && kill "$WP_PID" 2>/dev/null && wait "$WP_PID" 2>/dev/null
+
+    if [ "$GPIO_VERSION" -eq 2 ]; then
+        # v2: 使用 -c 指定芯片，后台运行即可持续输出
+        show_cmd "gpioset -c ${WP_GPIOCHIP} ${WP_LINE}=0 &"
+        gpioset -c "$WP_GPIOCHIP" "$WP_LINE=0" &
+        WP_PID=$!
     else
-        echo -e "${YELLOW}写保护解除失败（可能已解除）${NC}"
+        # v1: 使用 -m signal 后台运行，芯片作为位置参数，不要 -c
+        show_cmd "gpioset -m signal ${WP_GPIOCHIP} ${WP_LINE}=0 &"
+        gpioset -m signal "$WP_GPIOCHIP" "$WP_LINE=0" &
+        WP_PID=$!
     fi
-    sleep 0.5
+    sleep 0.2  # 确保后台进程已拉起
+    echo -e "${GREEN}写保护已解除（后台 PID: $WP_PID），菜单已就绪${NC}"
 }
 
+# ---------- 恢复写保护（杀掉后台进程）----------
 wp_on() {
-    show_cmd "gpioset -m time -s 10 ${WP_GPIOCHIP} ${WP_LINE}=1"
-    if gpioset -m time -s 10 ${WP_GPIOCHIP} ${WP_LINE}=1 2>/dev/null; then
-        echo -e "${GREEN}写保护已恢复${NC}"
-    else
-        echo -e "${YELLOW}写保护恢复失败${NC}"
+    if [ -n "$WP_PID" ] && kill -0 "$WP_PID" 2>/dev/null; then
+        show_cmd "kill ${WP_PID} (恢复写保护)"
+        kill "$WP_PID" 2>/dev/null
+        wait "$WP_PID" 2>/dev/null
     fi
+    WP_PID=""
+    echo -e "${GREEN}写保护已恢复${NC}"
 }
+
+# ---------- 退出清理（确保写保护恢复）----------
+cleanup() {
+    wp_on
+    echo -e "\n${GREEN}脚本已退出，写保护已恢复。${NC}"
+}
+trap cleanup EXIT
 
 auto_backup() {
     mkdir -p "$BACKUP_DIR"
@@ -215,7 +250,6 @@ test_sn() {
         die "偏移超出有效范围"; return 1
     fi
 
-    # 额外安全提醒：如果偏移低于安全阈值，再次警告
     if [ "$offset" -lt "$DEFAULT_SAFE_OFFSET" ]; then
         echo -e "\n${RED}${BOLD}⚠️  您指定的偏移 0x$(printf "%x" $offset) 位于低地址区域！${NC}"
         echo -e "${RED}写入非法 SN 将导致板卡识别错误，系统无法启动。${NC}"
@@ -262,13 +296,6 @@ restore_backup() {
     wp_on
     success "恢复完成"
 }
-
-# ---------- 退出清理（确保写保护恢复）----------
-cleanup() {
-    wp_on
-    echo -e "\n${GREEN}脚本已退出，写保护已恢复。${NC}"
-}
-trap cleanup EXIT
 
 # ---------- 主菜单 ----------
 main() {

@@ -1,0 +1,21 @@
+📄 日志: /home/seeed/test_file_RK3588/npu/log/npu_stress_20260731_144423.log
+⚙️  进程数: 8 | 核心模式: auto | 时长: 无限
+
+📊 每秒统计 (Ctrl+C 停止)：
+  [14:44:24] 总推理:        0 | NPU 负载: NPU load:  Core0: 14%, Core1: 11%, Core2:  6%,%
+  [14:44:25] 总推理:        0 | NPU 负载: NPU load:  Core0: 81%, Core1: 80%, Core2: 69%,%
+  [14:44:26] 总推理:        0 | NPU 负载: NPU load:  Core0: 75%, Core1: 66%, Core2: 50%,%
+  [14:44:27] 总推理:        0 | NPU 负载: NPU load:  Core0: 84%, Core1: 81%, Core2: 71%,%
+  [14:44:28] 总推理:        0 | NPU 负载: NPU load:  Core0: 72%, Core1: 60%, Core2: 47%,%
+  [14:44:29] 总推理:        0 | NPU 负载: NPU load:  Core0: 65%, Core1: 55%, Core2: 39%,%
+  [14:44:30] 总推理:        0 | NPU 负载: NPU load:  Core0: 81%, Core1: 81%, Core2: 64%,%
+  [14:44:31] 总推理:        0 | NPU 负载: NPU load:  Core0: 84%, Core1: 82%, Core2: 70%,%
+  [14:44:32] 总推理:        0 | NPU 负载: NPU load:  Core0: 84%, Core1: 83%, Core2: 68%,%
+  [14:44:33] 总推理:        0 | NPU 负载: NPU load:  Core0: 82%, Core1: 77%, Core2: 66%,%
+  [14:44:34] 总推理:        0 | NPU 负载: NPU load:  Core0: 87%, Core1: 79%, Core2: 72%,%
+  [14:44:35] 总推理:        0 | NPU 负载: NPU load:  Core0: 85%, Core1: 79%, Core2: 70%,%
+  [14:44:36] 总推理:      100 | NPU 负载: NPU load:  Core0: 81%, Core1: 81%, Core2: 72%,%
+  [14:44:37] 总推理:      700 | NPU 负载: NPU load:  Core0: 83%, Core1: 80%, Core2: 68%,%
+  [14:44:38] 总推理:      800 | NPU 负载: NPU load:  Core0: 84%, Core1: 78%, Core2: 68%,%
+
+🛑 用户中断
