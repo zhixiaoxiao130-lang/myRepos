@@ -33,7 +33,7 @@ end
 # Unset irrelevant variables.
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV "/home/seeed/rknpu_env_py310"
+set -gx VIRTUAL_ENV "/home/seeed/test_file_RK3588/rknpu_env_py310"
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/bin" $PATH

@@ -1,4 +1,4 @@
-#!/home/seeed/rknpu_env_py310/bin/python3.10
+#!/home/seeed/test_file_RK3588/rknpu_env_py310/bin/python3.10
 # -*- coding: utf-8 -*-
 import re
 import sys

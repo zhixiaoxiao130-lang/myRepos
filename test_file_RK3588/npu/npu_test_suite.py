@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """
-RK3588 NPU 综合测试工具（v8 - 自动部署 librknnrt.so & Python 源码编译指引）
+RK3588 NPU 综合测试工具（稳健版 - 修复虚拟环境扫描失败问题）
 功能：
   1. 纯 NPU 推理测试 (MobileNet-v1)
   2. CSI 摄像头实时分类
   3. NPU 压力测试 (YOLOv5s)
-环境自检：自动部署运行时库、智能处理 Python 版本不匹配。
+环境自检：
+  - 自动部署 librknnrt.so（若当前目录存在）
+  - 优先搜索本地 rknn_toolkit_lite2*.whl 并安装
+  - 自动搜索并激活已存在的虚拟环境（向上遍历父目录 + 常用路径，忽略权限错误）
+  - 无本地 wheel 时从 GitHub 仓库安装
+  - Python 版本不兼容时提供源码编译指引
 """
 
-import os, sys, time, subprocess, multiprocessing, re, shutil
+import os, sys, time, subprocess, multiprocessing, re, shutil, glob
 from multiprocessing import Process, Value, Event
 from ctypes import c_ulonglong
 from datetime import datetime
@@ -42,33 +47,7 @@ def print_section(title):
     print(f"{BOLD}{'='*55}{NC}")
 
 # ================= 动态库自动部署 =================
-def try_auto_deploy_librknnrt():
-    """
-    如果当前目录存在 librknnrt.so，但系统库路径中未找到，
-    自动尝试复制到 /usr/lib/ 并执行 ldconfig。
-    返回 True 表示部署成功或已经存在，False 表示需要手动处理。
-    """
-    # 先检查系统库中是否已有
-    if check_librknnrt():
-        return True
-
-    local_so = os.path.join(os.getcwd(), 'librknnrt.so')
-    if not os.path.exists(local_so):
-        return False  # 当前目录也没有，无法自动部署
-
-    print_warn("当前目录存在 librknnrt.so，但系统库路径中未找到，尝试自动部署...")
-    try:
-        subprocess.run(['sudo', 'cp', local_so, '/usr/lib/'], check=True)
-        subprocess.run(['sudo', 'ldconfig'], check=True)
-        print_ok("已成功将 librknnrt.so 部署到 /usr/lib/")
-        return True
-    except subprocess.CalledProcessError:
-        print_err("自动部署失败，请手动执行以下命令：")
-        print_bold(f"  sudo cp {local_so} /usr/lib/ && sudo ldconfig")
-        return False
-
 def check_librknnrt():
-    """检查 librknnrt.so 是否在系统库路径中"""
     for path in ['/usr/lib', '/usr/local/lib']:
         if os.path.exists(os.path.join(path, 'librknnrt.so')):
             return True
@@ -80,6 +59,23 @@ def check_librknnrt():
         pass
     return False
 
+def try_auto_deploy_librknnrt():
+    if check_librknnrt():
+        return True
+    local_so = os.path.join(os.getcwd(), 'librknnrt.so')
+    if not os.path.exists(local_so):
+        return False
+    print_warn("当前目录存在 librknnrt.so，但系统库路径中未找到，尝试自动部署...")
+    try:
+        subprocess.run(['sudo', 'cp', local_so, '/usr/lib/'], check=True)
+        subprocess.run(['sudo', 'ldconfig'], check=True)
+        print_ok("已成功将 librknnrt.so 部署到 /usr/lib/")
+        return True
+    except subprocess.CalledProcessError:
+        print_err("自动部署失败，请手动执行：")
+        print_bold(f"  sudo cp {local_so} /usr/lib/ && sudo ldconfig")
+        return False
+
 def guide_install_librknnrt():
     print_section("缺少 NPU 运行时库 (librknnrt.so)")
     print_bold("请按以下步骤安装：")
@@ -88,8 +84,24 @@ def guide_install_librknnrt():
     print("   wget https://raw.githubusercontent.com/airockchip/rknn-toolkit2/master/rknpu2/runtime/Linux/librknn_api/aarch64/librknnrt.so")
     print("2. 安装：")
     print_bold("   sudo cp librknnrt.so /usr/lib/ && sudo ldconfig")
-    print("\n若 wget 失败，也可从开发板预置目录或虚拟环境复制。")
     sys.exit(1)
+
+# ================= 本地 wheel 优先安装 =================
+def try_install_local_wheel():
+    wheel_files = glob.glob("rknn_toolkit_lite2*.whl")
+    if not wheel_files:
+        return False
+    whl = wheel_files[0]
+    print_ok(f"发现本地 wheel 包: {whl}")
+    print_bold("正在安装，请稍候...")
+    try:
+        subprocess.run([sys.executable, '-m', 'pip', 'install', whl], check=True)
+        print_ok("安装成功！请重新运行本脚本以继续测试。")
+        sys.exit(0)
+    except subprocess.CalledProcessError:
+        print_err("安装失败，请手动执行：")
+        print_bold(f"  pip install {whl}")
+        sys.exit(1)
 
 # ================= python3-venv 检查 =================
 def check_python_venv_installed(python_version=None):
@@ -111,9 +123,14 @@ def check_python_venv_installed(python_version=None):
         pass
     return False
 
-# ================= 虚拟环境处理 =================
+# ================= 虚拟环境智能发现 =================
+# 预定义常用路径
 POSSIBLE_VENVS = [
     "/home/seeed/rknpu_env",
+    "/home/seeed/rknpu_env_py310",
+    "/home/seeed/rknpu_env_py311",
+    "/home/seeed/rknpu_env_py312",
+    "/home/seeed/test_file_RK3588/rknpu_env_py310",   # 你的实际路径
     "/root/rknpu_env",
     os.path.expanduser("~/rknpu_env"),
     "/home/seeed/venv",
@@ -124,6 +141,7 @@ def is_venv():
     return sys.prefix != sys.base_prefix
 
 def find_venv_with_rknn():
+    """搜索已安装 rknn 的虚拟环境"""
     for venv_dir in POSSIBLE_VENVS:
         python_path = os.path.join(venv_dir, "bin", "python3")
         if os.path.isfile(python_path):
@@ -137,9 +155,101 @@ def find_venv_with_rknn():
     return None
 
 def switch_to_venv(venv_python):
-    print_bold(f"🔄 正在切换到虚拟环境: {venv_python}")
+    print_bold(f"🔄 正在自动进入虚拟环境: {venv_python}")
     os.execv(venv_python, [venv_python] + sys.argv)
 
+def scan_extra_venvs():
+    """
+    稳健扫描：从脚本所在目录向上遍历所有父目录（直到根目录），
+    同时扫描用户主目录，查找 rknpu_env* 目录，忽略权限错误。
+    """
+    extra = []
+    # 获取脚本绝对路径（可能在交互式环境中失败，则用当前工作目录）
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+    except:
+        script_dir = os.getcwd()
+    
+    # 向上遍历
+    current = script_dir
+    while True:
+        try:
+            if os.path.isdir(current):
+                for name in os.listdir(current):
+                    if name.startswith('rknpu_env'):
+                        path = os.path.join(current, name)
+                        if os.path.isdir(path) and path not in extra:
+                            extra.append(path)
+        except (PermissionError, OSError):
+            pass   # 忽略无权限访问的目录
+        parent = os.path.dirname(current)
+        if parent == current:  # 到达根目录
+            break
+        current = parent
+
+    # 扫描用户主目录
+    home = os.path.expanduser("~")
+    try:
+        if os.path.isdir(home):
+            for name in os.listdir(home):
+                if name.startswith('rknpu_env'):
+                    path = os.path.join(home, name)
+                    if os.path.isdir(path) and path not in extra:
+                        extra.append(path)
+    except (PermissionError, OSError):
+        pass
+
+    # 一些常见备选
+    for alt in ["/home/seeed/test_file_RK3588/rknpu_env_py310",
+                "/home/seeed/rknpu_env_py310"]:
+        if os.path.isdir(alt) and alt not in extra:
+            extra.append(alt)
+    return extra
+
+def find_first_valid_venv(venv_dirs):
+    """返回第一个存在的虚拟环境中的 python3 可执行文件，否则返回 None"""
+    for venv_dir in venv_dirs:
+        python_bin = os.path.join(venv_dir, "bin", "python3")
+        if os.path.isfile(python_bin) and os.access(python_bin, os.X_OK):
+            return python_bin
+    return None
+
+def activate_venv():
+    if not try_auto_deploy_librknnrt():
+        guide_install_librknnrt()
+
+    if is_venv():
+        print_ok("已在虚拟环境中运行")
+        return
+
+    print_warn("当前不在虚拟环境，正在搜索已安装的环境...")
+    # 1. 优先查找已安装 rknn 的环境
+    venv_python = find_venv_with_rknn()
+    if venv_python:
+        switch_to_venv(venv_python)
+        return
+
+    # 2. 合并预定义列表和动态扫描结果，去重
+    all_venv_dirs = list(dict.fromkeys(POSSIBLE_VENVS + scan_extra_venvs()))  # 保持顺序去重
+    python_bin = find_first_valid_venv(all_venv_dirs)
+    if python_bin:
+        venv_dir = os.path.dirname(os.path.dirname(python_bin))
+        print_warn(f"找到虚拟环境 '{venv_dir}'，正在自动激活...")
+        switch_to_venv(python_bin)
+        return
+
+    # 3. 无任何虚拟环境
+    print_section("未找到任何虚拟环境")
+    python_ver = f"python{sys.version_info.major}.{sys.version_info.minor}-venv"
+    if not check_python_venv_installed():
+        print_err(f"系统缺少 {python_ver} 包")
+        print_bold(f"请执行: sudo apt update && sudo apt install {python_ver}")
+    print_bold("\n创建虚拟环境并安装依赖：")
+    print_bold("  python3 -m venv /home/seeed/rknpu_env")
+    print_bold("  source /home/seeed/rknpu_env/bin/activate")
+    sys.exit(1)
+
+# ================= RKNN wheel 安装相关 =================
 def parse_cp_tag(cp_tag):
     match = re.search(r'cp(\d+)(?:m)?', cp_tag)
     if not match:
@@ -194,7 +304,6 @@ def install_instructions_for_version(ver):
     print_bold(f"   ./npu_test_suite.py")
 
 def source_build_python_instructions():
-    """源码编译 Python 3.10.15 指引（已验证可行）"""
     print_section("推荐方案：源码编译安装 Python 3.10.15")
     print_bold("此方法无需依赖系统软件源，安全可靠，适合 ARM64 开发板。")
     print()
@@ -216,7 +325,6 @@ def source_build_python_instructions():
     print("   source /home/seeed/rknpu_env_py310/bin/activate")
     print_bold("5. 重新运行本测试脚本：")
     print("   ./npu_test_suite.py")
-    print()
     print_info("若下载 python.org 速度慢，可使用国内镜像或从其他设备传输。")
 
 def auto_install_rknn_wheel():
@@ -239,7 +347,6 @@ def auto_install_rknn_wheel():
             print_err("克隆仓库失败，请检查网络或手动下载 wheel 包")
             sys.exit(1)
 
-    # 查找匹配当前 Python 的 wheel
     py_ver = f"cp{sys.version_info.major}{sys.version_info.minor}"
     find_cmd = f"find {clone_dir} -name 'rknn_toolkit_lite2*{py_ver}*.whl'"
     result = subprocess.run(find_cmd, shell=True, capture_output=True, text=True)
@@ -257,13 +364,11 @@ def auto_install_rknn_wheel():
             print_err("安装失败，请检查 pip 状态或尝试手动安装。")
             sys.exit(1)
 
-    # 无匹配包
     print_err(f"未找到匹配 Python {sys.version_info.major}.{sys.version_info.minor} 的预编译包")
     versions_available = show_available_whls(clone_dir)
     if not versions_available:
         sys.exit(1)
 
-    # 检查是否有已安装的兼容 Python
     installed_ver = find_installed_compatible_python(versions_available)
     if installed_ver:
         print_section("解决方案：使用已安装的兼容 Python 版本")
@@ -271,21 +376,17 @@ def auto_install_rknn_wheel():
         install_instructions_for_version(installed_ver)
         sys.exit(0)
 
-    # 既无已安装兼容版本，则给出源码编译 Python 3.10 的方案
     source_build_python_instructions()
     sys.exit(1)
 
-def handle_missing_rknn(venv_dir=None):
+def handle_missing_rknn():
+    if try_install_local_wheel():
+        return
+
     print_warn("检测到缺少 rknn-toolkit-lite2")
     print_info(f"当前 Python 版本: {sys.version.split()[0]}")
     choice = input("是否自动从 GitHub 克隆仓库并尝试安装？[Y/n]: ").strip().lower()
     if choice in ('', 'y', 'yes'):
-        if not is_venv():
-            if venv_dir:
-                print_bold(f"请先激活虚拟环境: source {venv_dir}/bin/activate")
-            else:
-                print_bold("请先创建并激活虚拟环境。")
-            sys.exit(1)
         auto_install_rknn_wheel()
     else:
         print_bold("手动安装步骤：")
@@ -298,55 +399,46 @@ def handle_missing_rknn(venv_dir=None):
         print("   pip install <查找到的 .whl 文件路径>")
         sys.exit(1)
 
-def activate_venv():
-    # 优先自动部署 librknnrt.so
-    if not try_auto_deploy_librknnrt():
-        guide_install_librknnrt()
-
-    if is_venv():
-        print_ok("已在虚拟环境中运行")
-        return
-
-    print_warn("当前不在虚拟环境，正在搜索已安装的环境...")
-    venv_python = find_venv_with_rknn()
-    if venv_python:
-        switch_to_venv(venv_python)
-        return
-
-    existing_venv = None
-    for venv_dir in POSSIBLE_VENVS:
-        if os.path.isdir(venv_dir) and os.path.isfile(os.path.join(venv_dir, "bin", "python3")):
-            existing_venv = venv_dir
-            break
-
-    if existing_venv:
-        print_warn(f"虚拟环境目录 '{existing_venv}' 已存在，但未安装 rknn")
-        print_bold(f"请先激活该环境: source {existing_venv}/bin/activate")
-        sys.exit(1)
-    else:
-        print_section("未找到任何虚拟环境")
-        python_ver = f"python{sys.version_info.major}.{sys.version_info.minor}-venv"
-        if not check_python_venv_installed():
-            print_err(f"系统缺少 {python_ver} 包")
-            print_bold("请执行: sudo apt update && sudo apt install {0}".format(python_ver))
-        print_bold("\n创建虚拟环境并安装依赖：")
-        print_bold("  python3 -m venv /home/seeed/rknpu_env")
-        print_bold("  source /home/seeed/rknpu_env/bin/activate")
-        sys.exit(1)
-
 def check_packages():
     try:
         from rknnlite.api import RKNNLite
         print_ok("rknn-toolkit-lite2 已安装")
     except ImportError:
         handle_missing_rknn()
+
+    # 检查 numpy 和 opencv-python
+    numpy_ok = True
+    opencv_ok = True
     try:
-        import cv2, numpy as np
-        print_ok("opencv-python, numpy 已安装")
-    except ImportError as e:
-        print_err(f"缺少依赖包: {e}")
-        print_bold("请执行: pip install opencv-python numpy")
+        import numpy as np
+    except ImportError:
+        numpy_ok = False
+    try:
+        import cv2
+    except ImportError:
+        opencv_ok = False
+
+    if not numpy_ok or not opencv_ok:
+        missing = []
+        if not numpy_ok:
+            missing.append("numpy")
+        if not opencv_ok:
+            missing.append("opencv-python")
+        print_err(f"缺少依赖包: {', '.join(missing)}")
+
+        if not is_venv():
+            print_warn("当前不在虚拟环境中，请先激活 Python 3.10 虚拟环境。")
+            print_bold("常用激活命令：")
+            print_bold("  source /home/seeed/test_file_RK3588/rknpu_env_py310/bin/activate")
+            print_bold("如果虚拟环境不存在，请创建：")
+            print_bold("  /usr/local/python3.10/bin/python3.10 -m venv /home/seeed/test_file_RK3588/rknpu_env_py310")
+            print_bold("激活后重新运行本脚本，脚本将自动安装缺失的包。")
+        else:
+            print_bold("请执行以下命令安装缺失的包：")
+            print_bold(f"  pip install {' '.join(missing)}")
         sys.exit(1)
+
+    print_ok("opencv-python, numpy 已安装")
 
 # ================= 模型文件查找 =================
 def find_model_file(model_path, extra_dirs=None):
@@ -511,7 +603,6 @@ class Tee:
         for f in self.files: f.flush()
 
 def npu_worker(proc_id, model_path, core_mode, stop_event, counter, total_counter, input_size):
-    """增强版 worker，带诊断输出"""
     try:
         from rknnlite.api import RKNNLite
         import numpy as np
