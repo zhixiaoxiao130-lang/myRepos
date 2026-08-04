@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-RK3588 NPU 综合测试工具（最终版 - 不再误导向 Python 3.13，ctypes 缺失时明确修复指导）
+RK3588 NPU 综合测试工具（最终版 - 权限修复、健康检查、自动安装）
 功能：
   1. 纯 NPU 推理测试 (MobileNet-v1)
   2. CSI 摄像头实时分类
   3. NPU 压力测试 (YOLOv5s)
 环境自检：
   - 自动部署 librknnrt.so（若当前目录存在）
-  - 优先搜索本地 rknn_toolkit_lite2*.whl 并安装
+  - 优先搜索本地 rknn_toolkit_lite2*.whl 并安装（失败不退出）
   - 自动搜索并激活已存在的虚拟环境（向上遍历父目录 + 常用路径）
-  - 本地 wheel 安装失败时自动尝试其他方式（克隆 GitHub 仓库或指导源码编译）
-  - Python 版本不兼容时提供源码编译指引（不再推荐 python3.13-venv）
-  - ctypes 模块缺失时给出精确修复指引
+  - 发现权限问题时提示 chmod +x；健康检查解释器，损坏时引导重新编译
+  - 缺失包时询问自动安装（opencv-python/numpy）
+  - 未找到虚拟环境时智能分析 wheel 包或直接指导源码编译（不再推荐 python3.13-venv）
 """
 
 import os, sys, time, subprocess, multiprocessing, re, shutil, glob
@@ -21,7 +21,7 @@ from datetime import datetime
 # 尝试导入 ctypes，若失败则说明 Python 编译不完整，给出明确修复指导
 try:
     from ctypes import c_ulonglong
-except ImportError as e:
+except ImportError:
     RED = '\033[91m'
     BOLD = '\033[1m'
     NC = '\033[0m'
@@ -149,6 +149,17 @@ def switch_to_venv(venv_python):
     print_bold(f"🔄 正在自动进入虚拟环境: {venv_python}")
     os.execv(venv_python, [venv_python] + sys.argv)
 
+def check_python_health(python_bin):
+    """检查指定 Python 解释器是否可正常运行（导入 ctypes）"""
+    try:
+        result = subprocess.run(
+            [python_bin, '-c', 'import ctypes; print("ok")'],
+            capture_output=True, text=True, timeout=5
+        )
+        return result.returncode == 0 and 'ok' in result.stdout
+    except Exception:
+        return False
+
 def scan_extra_venvs():
     extra = []
     try:
@@ -202,20 +213,56 @@ def activate_venv():
         return
 
     print_warn("当前不在虚拟环境，正在搜索已安装的环境...")
+    # 1. 优先查找已安装 rknn 的环境
     venv_python = find_venv_with_rknn()
     if venv_python:
-        switch_to_venv(venv_python)
-        return
+        if check_python_health(venv_python):
+            switch_to_venv(venv_python)
+        else:
+            print_section("虚拟环境中的 Python 解释器无法运行")
+            print_warn(f"解释器 '{venv_python}' 存在，但无法正确执行 Python 代码。")
+            print_info("这通常是因为 Python 编译时缺少 libffi-dev 导致 _ctypes 模块缺失。")
+            print_bold("请重新编译 Python 3.10.15：")
+            print_bold("  sudo apt update && sudo apt install -y libffi-dev")
+            print_bold("  cd /tmp/Python-3.10.15")
+            print_bold("  ./configure --enable-optimizations --prefix=/usr/local/python3.10")
+            print_bold("  make -j$(nproc) && sudo make install")
+            print_bold("  rm -rf /home/seeed/test_file_RK3588/rknpu_env_py310")
+            print_bold("  /usr/local/python3.10/bin/python3.10 -m venv /home/seeed/test_file_RK3588/rknpu_env_py310")
+            print_bold("然后重新运行本脚本。")
+            sys.exit(1)
 
+    # 2. 查找任意有效虚拟环境
     all_venv_dirs = list(dict.fromkeys(POSSIBLE_VENVS + scan_extra_venvs()))
     python_bin = find_first_valid_venv(all_venv_dirs)
     if python_bin:
-        venv_dir = os.path.dirname(os.path.dirname(python_bin))
-        print_warn(f"找到虚拟环境 '{venv_dir}'，正在自动激活...")
-        switch_to_venv(python_bin)
-        return
+        if check_python_health(python_bin):
+            venv_dir = os.path.dirname(os.path.dirname(python_bin))
+            print_warn(f"找到虚拟环境 '{venv_dir}'，正在自动激活...")
+            switch_to_venv(python_bin)
+        else:
+            print_section("虚拟环境中的 Python 解释器无法运行")
+            print_warn(f"解释器 '{python_bin}' 存在，但无法正确执行 Python 代码。")
+            print_bold("请重新编译 Python 3.10.15（确保安装 libffi-dev）：")
+            print_bold("  sudo apt update && sudo apt install -y libffi-dev")
+            print_bold("  cd /tmp/Python-3.10.15 && ./configure --enable-optimizations --prefix=/usr/local/python3.10 && make -j$(nproc) && sudo make install")
+            print_bold("  rm -rf /home/seeed/test_file_RK3588/rknpu_env_py310")
+            print_bold("  /usr/local/python3.10/bin/python3.10 -m venv /home/seeed/test_file_RK3588/rknpu_env_py310")
+            print_bold("然后重新运行本脚本。")
+            sys.exit(1)
 
-    # ===== 未找到任何虚拟环境，不再提示安装 python3.13-venv =====
+    # 3. 检查是否存在 python3 文件但缺少执行权限
+    for venv_dir in all_venv_dirs:
+        py_path = os.path.join(venv_dir, "bin", "python3")
+        if os.path.isfile(py_path):
+            print_section("虚拟环境已存在但 Python 无执行权限")
+            print_warn(f"文件 '{py_path}' 存在，但缺少可执行权限。")
+            print_bold("请执行以下命令修复权限：")
+            print_bold(f"  chmod +x {py_path}")
+            print_bold("修复后重新运行本脚本。")
+            sys.exit(1)
+
+    # 4. 没有任何可用的虚拟环境
     print_section("未找到兼容的虚拟环境")
     wheel_files = glob.glob("rknn_toolkit_lite2*.whl")
     if wheel_files:
@@ -285,7 +332,7 @@ def source_build_python_instructions():
     print_section("源码编译安装 Python 3.10.15（推荐）")
     print_bold("此方法无需依赖系统软件源，安全可靠，适合 ARM64 开发板。")
     print()
-    print_bold("1. 安装编译依赖：")
+    print_bold("1. 安装编译依赖（确保 libffi-dev 已安装）：")
     print("   sudo apt update")
     print("   sudo apt install -y build-essential libssl-dev zlib1g-dev \\")
     print("     libbz2-dev libreadline-dev libsqlite3-dev libffi-dev liblzma-dev wget")
@@ -298,9 +345,12 @@ def source_build_python_instructions():
     print("   ./configure --enable-optimizations --prefix=/usr/local/python3.10")
     print("   make -j$(nproc)")
     print("   sudo make install")
-    print_bold("4. 创建虚拟环境并激活：")
-    print("   /usr/local/python3.10/bin/python3.10 -m venv /home/seeed/rknpu_env_py310")
-    print("   source /home/seeed/rknpu_env_py310/bin/activate")
+    print_bold("4. 激活已有虚拟环境（如已存在）或创建新环境：")
+    print("   如果您已有 rknpu_env_py310 目录，直接激活即可：")
+    print_bold("     source /home/seeed/test_file_RK3588/rknpu_env_py310/bin/activate")
+    print("   如需新建，请执行：")
+    print_bold("     /usr/local/python3.10/bin/python3.10 -m venv /home/seeed/rknpu_env_py310")
+    print_bold("     source /home/seeed/rknpu_env_py310/bin/activate")
     print_bold("5. 重新运行本测试脚本：")
     print("   ./npu_test_suite.py")
     print_info("若下载 python.org 速度慢，可使用国内镜像或从其他设备传输。")
@@ -413,14 +463,29 @@ def check_packages():
         if not opencv_ok:
             missing.append("opencv-python")
         print_err(f"缺少依赖包: {', '.join(missing)}")
+
         if not is_venv():
             print_warn("当前不在虚拟环境中，请先激活 Python 3.10 虚拟环境。")
             print_bold("常用激活命令：")
             print_bold("  source /home/seeed/test_file_RK3588/rknpu_env_py310/bin/activate")
+            print_bold("激活后重新运行本脚本，将自动安装缺失的包。")
+            sys.exit(1)
+
+        print_info(f"将安装: {' '.join(missing)}")
+        choice = input("是否现在安装？[Y/n]: ").strip().lower()
+        if choice in ('', 'y', 'yes'):
+            print_bold("正在安装...")
+            try:
+                subprocess.run([sys.executable, '-m', 'pip', 'install'] + missing, check=True)
+                print_ok("安装成功！请重新运行本脚本以继续测试。")
+                sys.exit(0)
+            except subprocess.CalledProcessError:
+                print_err("安装失败，请手动执行：")
+                print_bold(f"  pip install {' '.join(missing)}")
+                sys.exit(1)
         else:
-            print_bold("请执行以下命令安装缺失的包：")
-            print_bold(f"  pip install {' '.join(missing)}")
-        sys.exit(1)
+            print_bold(f"请手动执行: pip install {' '.join(missing)}")
+            sys.exit(1)
 
     print_ok("opencv-python, numpy 已安装")
 
@@ -681,16 +746,6 @@ def run_stress_test():
 
 # ================= 主菜单 =================
 def main():
-    # 早期检查：如果 Python 缺少 _ctypes 模块，给出修复指导后退出
-    try:
-        import ctypes
-    except ImportError:
-        print_err("当前 Python 环境缺少 '_ctypes' 模块，通常因编译时未安装 libffi-dev 导致。")
-        print_bold("请执行以下步骤修复：")
-        print_bold("  sudo apt update && sudo apt install -y libffi-dev")
-        print_bold("  然后重新编译 Python 3.10.15 并创建虚拟环境。")
-        sys.exit(1)
-
     print_section("RK3588 NPU 环境检查")
     activate_venv()
     check_packages()
