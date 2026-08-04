@@ -1,0 +1,64 @@
+[i] 执行: cd /home/seeed/test_file_RK3588/npu && python3 npu_test_suite.py 
+
+=======================================================
+RK3588 NPU 环境检查
+=======================================================
+⚠️  当前目录存在 librknnrt.so，但系统库路径中未找到，尝试自动部署...
+✅ 已成功将 librknnrt.so 部署到 /usr/lib/
+⚠️  当前不在虚拟环境，正在搜索已安装的环境...
+
+=======================================================
+未找到任何虚拟环境
+=======================================================
+❌ 系统缺少 python3.13-venv 包
+请执行: sudo apt update && sudo apt install python3.13-venv
+
+创建虚拟环境并安装依赖：
+  python3 -m venv /home/seeed/rknpu_env
+  source /home/seeed/rknpu_env/bin/activate
+
+测试执行完毕，按回车键返回菜单...^C
+seeed@recomputer-rk3588-devkit:~/test_file_RK3588$ ls
+4g_test.sh  fan_test.sh        hdmi_in               rknpu_env_py310  test.txt
+csi         firmware_check.sh  npu                   rtc              usb
+dsi.sh      gpio_test.py       rk3588_test_suite.sh  ssd
+eeprom      gpu                rk_monitor.py         stress_cpu.sh
+seeed@recomputer-rk3588-devkit:~/test_file_RK3588$ sudo apt update && sudo apt install python3.13-venv
+Hit:1 http://deb.debian.org/debian trixie InRelease
+Hit:2 http://deb.debian.org/debian trixie-updates InRelease                    
+Get:3 http://security.debian.org trixie-security InRelease [43.4 kB]           
+Hit:4 http://deb.debian.org/debian trixie-backports InRelease                  
+Hit:5 https://seeed-studio.github.io/seeed_armbian_extension stable InRelease  
+Hit:6 https://github.armbian.com/configng stable InRelease                     
+Hit:7 http://mirrors.nju.edu.cn/armbian trixie InRelease
+Fetched 43.4 kB in 1s (32.5 kB/s)
+27 packages can be upgraded. Run 'apt list --upgradable' to see them.
+Installing:                     
+  python3.13-venv
+
+Installing dependencies:
+  python3-pip-whl  python3-setuptools-whl
+
+Summary:
+  Upgrading: 0, Installing: 3, Removing: 0, Not Upgrading: 27
+  Download size: 2,781 kB
+  Space needed: 2,951 kB / 8,830 MB available
+
+Continue? [Y/n] y
+Get:1 http://deb.debian.org/debian trixie/main arm64 python3-pip-whl all 25.1.1+dfsg-1 [1,507 kB]
+Get:2 http://deb.debian.org/debian trixie/main arm64 python3-setuptools-whl all 78.1.1-0.1 [1,268 kB]
+Get:3 http://deb.debian.org/debian trixie-updates/main arm64 python3.13-venv arm64 3.13.5-2+deb13u4 [5,472 B]
+Fetched 2,781 kB in 3min 3s (15.2 kB/s)                                        
+Selecting previously unselected package python3-pip-whl.
+(Reading database ... 136593 files and directories currently installed.)
+Preparing to unpack .../python3-pip-whl_25.1.1+dfsg-1_all.deb ...
+Unpacking python3-pip-whl (25.1.1+dfsg-1) ...
+Selecting previously unselected package python3-setuptools-whl.
+Preparing to unpack .../python3-setuptools-whl_78.1.1-0.1_all.deb ...
+Unpacking python3-setuptools-whl (78.1.1-0.1) ...
+Selecting previously unselected package python3.13-venv.
+Preparing to unpack .../python3.13-venv_3.13.5-2+deb13u4_arm64.deb ...
+Unpacking python3.13-venv (3.13.5-2+deb13u4) ...
+Setting up python3-setuptools-whl (78.1.1-0.1) ...
+Setting up python3-pip-whl (25.1.1+dfsg-1) ...
+Setting up python3.13-venv (3.13.5-2+deb13u4) ...

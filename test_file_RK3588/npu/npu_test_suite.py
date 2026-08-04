@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-RK3588 NPU 综合测试工具（稳健版 - 修复虚拟环境扫描失败问题）
+RK3588 NPU 综合测试工具（最终版 - 不再误导向 Python 3.13，ctypes 缺失时明确修复指导）
 功能：
   1. 纯 NPU 推理测试 (MobileNet-v1)
   2. CSI 摄像头实时分类
@@ -8,15 +8,28 @@ RK3588 NPU 综合测试工具（稳健版 - 修复虚拟环境扫描失败问题
 环境自检：
   - 自动部署 librknnrt.so（若当前目录存在）
   - 优先搜索本地 rknn_toolkit_lite2*.whl 并安装
-  - 自动搜索并激活已存在的虚拟环境（向上遍历父目录 + 常用路径，忽略权限错误）
-  - 无本地 wheel 时从 GitHub 仓库安装
-  - Python 版本不兼容时提供源码编译指引
+  - 自动搜索并激活已存在的虚拟环境（向上遍历父目录 + 常用路径）
+  - 本地 wheel 安装失败时自动尝试其他方式（克隆 GitHub 仓库或指导源码编译）
+  - Python 版本不兼容时提供源码编译指引（不再推荐 python3.13-venv）
+  - ctypes 模块缺失时给出精确修复指引
 """
 
 import os, sys, time, subprocess, multiprocessing, re, shutil, glob
 from multiprocessing import Process, Value, Event
-from ctypes import c_ulonglong
 from datetime import datetime
+
+# 尝试导入 ctypes，若失败则说明 Python 编译不完整，给出明确修复指导
+try:
+    from ctypes import c_ulonglong
+except ImportError as e:
+    RED = '\033[91m'
+    BOLD = '\033[1m'
+    NC = '\033[0m'
+    print(f"{RED}❌ 当前 Python 环境缺少 '_ctypes' 模块（编译时未安装 libffi-dev）。{NC}")
+    print(f"{BOLD}请执行以下命令修复：{NC}")
+    print(f"{BOLD}  sudo apt update && sudo apt install -y libffi-dev{NC}")
+    print(f"{BOLD}  然后重新编译 Python 3.10.15 并创建虚拟环境。{NC}")
+    sys.exit(1)
 
 # ================= 终端格式化 =================
 BOLD = '\033[1m'
@@ -86,7 +99,7 @@ def guide_install_librknnrt():
     print_bold("   sudo cp librknnrt.so /usr/lib/ && sudo ldconfig")
     sys.exit(1)
 
-# ================= 本地 wheel 优先安装 =================
+# ================= 本地 wheel 安装（失败不退出） =================
 def try_install_local_wheel():
     wheel_files = glob.glob("rknn_toolkit_lite2*.whl")
     if not wheel_files:
@@ -99,38 +112,17 @@ def try_install_local_wheel():
         print_ok("安装成功！请重新运行本脚本以继续测试。")
         sys.exit(0)
     except subprocess.CalledProcessError:
-        print_err("安装失败，请手动执行：")
-        print_bold(f"  pip install {whl}")
-        sys.exit(1)
-
-# ================= python3-venv 检查 =================
-def check_python_venv_installed(python_version=None):
-    if python_version is None:
-        python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
-    pkg = f"python{python_version}-venv"
-    try:
-        subprocess.run(['dpkg', '-s', pkg], capture_output=True, check=True)
-        return True
-    except:
-        pass
-    try:
-        res = subprocess.run(
-            ['bash', '-c', f'apt list --installed 2>/dev/null | grep -q "^{pkg}/"'],
-            capture_output=True)
-        if res.returncode == 0:
-            return True
-    except:
-        pass
-    return False
+        print_err("本地 wheel 包安装失败（Python 版本不匹配或缺少依赖）。")
+        print_info("脚本将尝试其他安装方式...")
+        return False
 
 # ================= 虚拟环境智能发现 =================
-# 预定义常用路径
 POSSIBLE_VENVS = [
     "/home/seeed/rknpu_env",
     "/home/seeed/rknpu_env_py310",
     "/home/seeed/rknpu_env_py311",
     "/home/seeed/rknpu_env_py312",
-    "/home/seeed/test_file_RK3588/rknpu_env_py310",   # 你的实际路径
+    "/home/seeed/test_file_RK3588/rknpu_env_py310",
     "/root/rknpu_env",
     os.path.expanduser("~/rknpu_env"),
     "/home/seeed/venv",
@@ -141,7 +133,6 @@ def is_venv():
     return sys.prefix != sys.base_prefix
 
 def find_venv_with_rknn():
-    """搜索已安装 rknn 的虚拟环境"""
     for venv_dir in POSSIBLE_VENVS:
         python_path = os.path.join(venv_dir, "bin", "python3")
         if os.path.isfile(python_path):
@@ -159,18 +150,11 @@ def switch_to_venv(venv_python):
     os.execv(venv_python, [venv_python] + sys.argv)
 
 def scan_extra_venvs():
-    """
-    稳健扫描：从脚本所在目录向上遍历所有父目录（直到根目录），
-    同时扫描用户主目录，查找 rknpu_env* 目录，忽略权限错误。
-    """
     extra = []
-    # 获取脚本绝对路径（可能在交互式环境中失败，则用当前工作目录）
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
     except:
         script_dir = os.getcwd()
-    
-    # 向上遍历
     current = script_dir
     while True:
         try:
@@ -181,13 +165,11 @@ def scan_extra_venvs():
                         if os.path.isdir(path) and path not in extra:
                             extra.append(path)
         except (PermissionError, OSError):
-            pass   # 忽略无权限访问的目录
+            pass
         parent = os.path.dirname(current)
-        if parent == current:  # 到达根目录
+        if parent == current:
             break
         current = parent
-
-    # 扫描用户主目录
     home = os.path.expanduser("~")
     try:
         if os.path.isdir(home):
@@ -198,8 +180,6 @@ def scan_extra_venvs():
                         extra.append(path)
     except (PermissionError, OSError):
         pass
-
-    # 一些常见备选
     for alt in ["/home/seeed/test_file_RK3588/rknpu_env_py310",
                 "/home/seeed/rknpu_env_py310"]:
         if os.path.isdir(alt) and alt not in extra:
@@ -207,7 +187,6 @@ def scan_extra_venvs():
     return extra
 
 def find_first_valid_venv(venv_dirs):
-    """返回第一个存在的虚拟环境中的 python3 可执行文件，否则返回 None"""
     for venv_dir in venv_dirs:
         python_bin = os.path.join(venv_dir, "bin", "python3")
         if os.path.isfile(python_bin) and os.access(python_bin, os.X_OK):
@@ -223,14 +202,12 @@ def activate_venv():
         return
 
     print_warn("当前不在虚拟环境，正在搜索已安装的环境...")
-    # 1. 优先查找已安装 rknn 的环境
     venv_python = find_venv_with_rknn()
     if venv_python:
         switch_to_venv(venv_python)
         return
 
-    # 2. 合并预定义列表和动态扫描结果，去重
-    all_venv_dirs = list(dict.fromkeys(POSSIBLE_VENVS + scan_extra_venvs()))  # 保持顺序去重
+    all_venv_dirs = list(dict.fromkeys(POSSIBLE_VENVS + scan_extra_venvs()))
     python_bin = find_first_valid_venv(all_venv_dirs)
     if python_bin:
         venv_dir = os.path.dirname(os.path.dirname(python_bin))
@@ -238,15 +215,28 @@ def activate_venv():
         switch_to_venv(python_bin)
         return
 
-    # 3. 无任何虚拟环境
-    print_section("未找到任何虚拟环境")
-    python_ver = f"python{sys.version_info.major}.{sys.version_info.minor}-venv"
-    if not check_python_venv_installed():
-        print_err(f"系统缺少 {python_ver} 包")
-        print_bold(f"请执行: sudo apt update && sudo apt install {python_ver}")
-    print_bold("\n创建虚拟环境并安装依赖：")
-    print_bold("  python3 -m venv /home/seeed/rknpu_env")
-    print_bold("  source /home/seeed/rknpu_env/bin/activate")
+    # ===== 未找到任何虚拟环境，不再提示安装 python3.13-venv =====
+    print_section("未找到兼容的虚拟环境")
+    wheel_files = glob.glob("rknn_toolkit_lite2*.whl")
+    if wheel_files:
+        cp_match = re.search(r'cp(\d+)', wheel_files[0])
+        if cp_match:
+            required_ver = parse_cp_tag(cp_match.group(0))
+            if required_ver:
+                python_bin = f"python{required_ver}"
+                if shutil.which(python_bin):
+                    print_bold(f"检测到系统已安装 Python {required_ver}，请创建虚拟环境：")
+                    venv_name = f"rknpu_env_py{required_ver.replace('.', '')}"
+                    print_bold(f"  {python_bin} -m venv /home/seeed/{venv_name}")
+                    print_bold(f"  source /home/seeed/{venv_name}/bin/activate")
+                    print_bold("然后重新运行本脚本。")
+                else:
+                    print_bold(f"本地 wheel 包需要 Python {required_ver}，但系统未安装。")
+                    source_build_python_instructions()
+                sys.exit(1)
+    # 通用方案：源码编译 Python 3.10.15
+    print_bold("建议源码编译安装 Python 3.10.15（已适配 RK3588）。")
+    source_build_python_instructions()
     sys.exit(1)
 
 # ================= RKNN wheel 安装相关 =================
@@ -291,20 +281,8 @@ def find_installed_compatible_python(versions):
             return ver
     return None
 
-def install_instructions_for_version(ver):
-    python_bin = f"python{ver}"
-    venv_path = f"/home/seeed/rknpu_env_py{ver.replace('.', '')}"
-    print_bold(f"1. 安装 Python {ver} 及 venv：")
-    print_bold(f"   sudo apt update && sudo apt install {python_bin} {python_bin}-venv")
-    print_bold(f"2. 创建虚拟环境：")
-    print_bold(f"   {python_bin} -m venv {venv_path}")
-    print_bold(f"3. 激活虚拟环境：")
-    print_bold(f"   source {venv_path}/bin/activate")
-    print_bold(f"4. 重新运行本脚本（会自动安装 wheel 包）：")
-    print_bold(f"   ./npu_test_suite.py")
-
 def source_build_python_instructions():
-    print_section("推荐方案：源码编译安装 Python 3.10.15")
+    print_section("源码编译安装 Python 3.10.15（推荐）")
     print_bold("此方法无需依赖系统软件源，安全可靠，适合 ARM64 开发板。")
     print()
     print_bold("1. 安装编译依赖：")
@@ -379,10 +357,21 @@ def auto_install_rknn_wheel():
     source_build_python_instructions()
     sys.exit(1)
 
+def install_instructions_for_version(ver):
+    python_bin = f"python{ver}"
+    venv_path = f"/home/seeed/rknpu_env_py{ver.replace('.', '')}"
+    print_bold(f"1. 安装 Python {ver} 及 venv：")
+    print_bold(f"   sudo apt update && sudo apt install {python_bin} {python_bin}-venv")
+    print_bold(f"2. 创建虚拟环境：")
+    print_bold(f"   {python_bin} -m venv {venv_path}")
+    print_bold(f"3. 激活虚拟环境：")
+    print_bold(f"   source {venv_path}/bin/activate")
+    print_bold(f"4. 重新运行本脚本（会自动安装 wheel 包）：")
+    print_bold(f"   ./npu_test_suite.py")
+
 def handle_missing_rknn():
     if try_install_local_wheel():
         return
-
     print_warn("检测到缺少 rknn-toolkit-lite2")
     print_info(f"当前 Python 版本: {sys.version.split()[0]}")
     choice = input("是否自动从 GitHub 克隆仓库并尝试安装？[Y/n]: ").strip().lower()
@@ -406,7 +395,6 @@ def check_packages():
     except ImportError:
         handle_missing_rknn()
 
-    # 检查 numpy 和 opencv-python
     numpy_ok = True
     opencv_ok = True
     try:
@@ -425,14 +413,10 @@ def check_packages():
         if not opencv_ok:
             missing.append("opencv-python")
         print_err(f"缺少依赖包: {', '.join(missing)}")
-
         if not is_venv():
             print_warn("当前不在虚拟环境中，请先激活 Python 3.10 虚拟环境。")
             print_bold("常用激活命令：")
             print_bold("  source /home/seeed/test_file_RK3588/rknpu_env_py310/bin/activate")
-            print_bold("如果虚拟环境不存在，请创建：")
-            print_bold("  /usr/local/python3.10/bin/python3.10 -m venv /home/seeed/test_file_RK3588/rknpu_env_py310")
-            print_bold("激活后重新运行本脚本，脚本将自动安装缺失的包。")
         else:
             print_bold("请执行以下命令安装缺失的包：")
             print_bold(f"  pip install {' '.join(missing)}")
@@ -487,7 +471,7 @@ def check_csi_overlays():
     print("   然后执行: sudo sync && sudo reboot")
     return False
 
-# ================= 测试函数（带诊断） =================
+# ================= 测试函数 =================
 def run_quick_test():
     print_section("纯 NPU 推理测试 (MobileNet-v1)")
     model = "mobilenet_v1.rknn"
@@ -697,6 +681,16 @@ def run_stress_test():
 
 # ================= 主菜单 =================
 def main():
+    # 早期检查：如果 Python 缺少 _ctypes 模块，给出修复指导后退出
+    try:
+        import ctypes
+    except ImportError:
+        print_err("当前 Python 环境缺少 '_ctypes' 模块，通常因编译时未安装 libffi-dev 导致。")
+        print_bold("请执行以下步骤修复：")
+        print_bold("  sudo apt update && sudo apt install -y libffi-dev")
+        print_bold("  然后重新编译 Python 3.10.15 并创建虚拟环境。")
+        sys.exit(1)
+
     print_section("RK3588 NPU 环境检查")
     activate_venv()
     check_packages()

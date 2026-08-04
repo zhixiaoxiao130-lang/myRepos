@@ -1,5 +1,5 @@
 #!/bin/bash
-# RK3588 自动化测试主控脚本（修复 CSI 预览问题）
+# RK3588 自动化测试主控脚本（修复视频/CSI 图形环境问题）
 # 用法: sudo ./rk3588_test_suite.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 INFO="${CYAN}[i]${NC}"; OK="${GREEN}[✓]${NC}"; ERR="${RED}[✗]${NC}"
 
-# ---------- 通用执行函数（以 root 运行）----------
+# ---------- 通用执行函数（以 root 运行，用于不需要图形环境的测试）----------
 run_script() {
     local script_path="$1"; shift
     local script_dir=$(dirname "$script_path")
@@ -38,9 +38,9 @@ run_script() {
     read -p "测试执行完毕，按回车键返回菜单..."
 }
 
-# ---------- 摄像头测试专用函数（以普通用户身份运行，保留图形环境）----------
-run_csi_script() {
-    local script_path="$1"
+# ---------- 图形环境脚本专用函数（视频/摄像头/GPU 压测等）----------
+run_graphical_script() {
+    local script_path="$1"; shift
     local script_dir=$(dirname "$script_path")
     local script_name=$(basename "$script_path")
     if [ ! -f "$script_path" ]; then
@@ -49,32 +49,34 @@ run_csi_script() {
         return
     fi
 
-    # 需要 sudo 用户才能降权
-    if [ -z "${SUDO_USER:-}" ]; then
-        echo -e "${ERR} 无法获取原始用户，请通过 sudo 运行集成脚本。"
-        read -p "按回车键返回菜单..."
-        return
+    # 如果存在 SUDO_USER，则以原始用户身份运行，并注入图形环境变量
+    if [ -n "${SUDO_USER:-}" ]; then
+        local user_uid=$(id -u "$SUDO_USER")
+        local xdg_runtime="/run/user/${user_uid}"
+        if [ ! -d "$xdg_runtime" ]; then
+            echo -e "${YELLOW}⚠️  用户 ${SUDO_USER} 的运行时目录 ${xdg_runtime} 不存在，预览/播放可能失败。${NC}"
+        fi
+
+        local wayland_display=$(sudo -u "$SUDO_USER" bash -c 'echo $WAYLAND_DISPLAY' 2>/dev/null)
+        echo -e "${INFO} 以用户 ${SUDO_USER} 身份执行图形测试..."
+
+        sudo -u "$SUDO_USER" env \
+            XDG_RUNTIME_DIR="$xdg_runtime" \
+            WAYLAND_DISPLAY="${wayland_display:-wayland-0}" \
+            DISPLAY="${DISPLAY:-}" \
+            bash -c "cd '$script_dir' && exec bash '$script_name' $*"
+
+        echo ""
+        read -p "测试执行完毕，按回车键返回菜单..."
+    else
+        # 没有 SUDO_USER（直接 root 登录），回退到 root 运行，但警告可能失败
+        echo -e "${YELLOW}⚠️  未检测到 sudo 用户（可能直接以 root 登录），将以 root 身份运行图形程序。${NC}"
+        echo -e "${YELLOW}  如果程序需要图形界面（如视频播放/CSI 预览），可能会失败。${NC}"
+        echo -e "${YELLOW}  建议通过 'sudo ./rk3588_test_suite.sh' 运行本工具。${NC}"
+        echo ""
+        read -p "按回车键继续尝试，或 Ctrl+C 取消..."
+        run_script "$script_path" "$@"
     fi
-
-    local user_uid=$(id -u "$SUDO_USER")
-    local xdg_runtime="/run/user/${user_uid}"
-    if [ ! -d "$xdg_runtime" ]; then
-        echo -e "${YELLOW}⚠️ 用户 ${SUDO_USER} 的运行时目录 ${xdg_runtime} 不存在，预览可能失败。${NC}"
-    fi
-
-    # 尝试获取原始用户的 WAYLAND_DISPLAY
-    local wayland_display=$(sudo -u "$SUDO_USER" bash -c 'echo $WAYLAND_DISPLAY' 2>/dev/null)
-
-    echo -e "${INFO} 以用户 ${SUDO_USER} 身份执行摄像头测试，保留图形环境..."
-
-    # 用原始用户身份启动脚本，传递必要的 Wayland 环境
-    sudo -u "$SUDO_USER" env \
-        XDG_RUNTIME_DIR="$xdg_runtime" \
-        WAYLAND_DISPLAY="${wayland_display:-wayland-0}" \
-        bash -c "cd '$script_dir' && exec bash '$script_name'"
-
-    echo ""
-    read -p "测试执行完毕，按回车键返回菜单..."
 }
 
 # ---------- 子菜单 ----------
@@ -90,8 +92,8 @@ gpu_menu() {
         echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         read -p "请输入选项 (1-3): " gpu_choice
         case $gpu_choice in
-            1) run_script "$SCRIPT_DIR/gpu/play_video.sh" ;;
-            2) run_script "$SCRIPT_DIR/gpu/stress_gpu.sh" ;;
+            1) run_graphical_script "$SCRIPT_DIR/gpu/play_video.sh" ;;
+            2) run_graphical_script "$SCRIPT_DIR/gpu/stress_gpu.sh" ;;
             3) return ;;
             *) echo -e "${ERR} 无效选项"; sleep 1 ;;
         esac
@@ -187,7 +189,7 @@ main_menu() {
         case $main_choice in
             1) run_script "$SCRIPT_DIR/firmware_check.sh" ;;
             2) run_script "$SCRIPT_DIR/npu/npu_test_suite.py" ;;
-            3) run_csi_script "$SCRIPT_DIR/csi/csi.sh" ;;   # 使用专用函数，解决预览问题
+            3) run_graphical_script "$SCRIPT_DIR/csi/csi.sh" ;;   # 改用图形环境函数
             4) display_menu ;;
             5) storage_menu ;;
             6) peripheral_menu ;;
