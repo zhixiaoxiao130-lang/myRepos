@@ -93,7 +93,7 @@ gpu_menu() {
         read -p "请输入选项 (1-3): " gpu_choice
         case $gpu_choice in
             1) run_graphical_script "$SCRIPT_DIR/gpu/play_video.sh" ;;
-            2) run_graphical_script "$SCRIPT_DIR/gpu/stress_gpu.sh" ;;
+            2) run_script "$SCRIPT_DIR/gpu/stress_gpu.sh" ;;
             3) return ;;
             *) echo -e "${ERR} 无效选项"; sleep 1 ;;
         esac
