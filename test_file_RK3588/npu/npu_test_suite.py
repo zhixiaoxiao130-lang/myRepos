@@ -160,6 +160,63 @@ def check_python_health(python_bin):
     except Exception:
         return False
 
+def is_python310_installed():
+    """检测系统是否已安装 Python 3.10"""
+    # 检查常见的 python3.10 路径
+    for path in ['/usr/local/python3.10/bin/python3.10', '/usr/bin/python3.10']:
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            return True
+    # 检查 PATH 中是否有 python3.10
+    if shutil.which('python3.10'):
+        return True
+    return False
+
+def is_python_binary_real(python_bin):
+    """检查 Python 解释器是否真实存在（不是损坏的软链接）"""
+    try:
+        real_path = os.path.realpath(python_bin)
+        return os.path.isfile(real_path) and os.access(real_path, os.X_OK)
+    except Exception:
+        return False
+
+def handle_venv_python_broken(python_bin):
+    """当虚拟环境中的 Python 解释器不可用时，给出正确的修复指引"""
+    print_section("虚拟环境中的 Python 解释器无法运行")
+    print_warn(f"解释器 '{python_bin}' 存在，但无法正确执行 Python 代码。")
+
+    if not is_python_binary_real(python_bin):
+        # 软链接指向的 Python 二进制文件不存在
+        print_info("该解释器是一个损坏的软链接，指向的 Python 二进制文件不存在。")
+        if is_python310_installed():
+            # Python 3.10 已安装，只需重建虚拟环境
+            print_info("但系统已安装 Python 3.10，只需重建虚拟环境即可。")
+            venv_dir = os.path.dirname(os.path.dirname(python_bin))
+            print_bold("请执行以下命令重建虚拟环境：")
+            print_bold(f"  rm -rf {venv_dir}")
+            print_bold(f"  /usr/local/python3.10/bin/python3.10 -m venv {venv_dir}")
+            print_bold("然后重新运行本脚本。")
+        else:
+            print_info("这表明 Python 3.10 未被正确安装或已被移除。")
+            source_build_python_instructions()
+        sys.exit(1)
+
+    if is_python310_installed():
+        # Python 3.10 已安装但缺少 _ctypes 模块
+        print_info("Python 3.10 已安装，但缺少 _ctypes 模块（通常是因为编译时未安装 libffi-dev）。")
+        print_bold("请重新编译 Python 3.10.15（确保安装 libffi-dev）：")
+        print_bold("  sudo apt update && sudo apt install -y libffi-dev")
+        print_bold("  cd /tmp/Python-3.10.15")
+        print_bold("  ./configure --enable-optimizations --prefix=/usr/local/python3.10")
+        print_bold("  make -j$(nproc) && sudo make install")
+        print_bold("  rm -rf /home/seeed/test_file_RK3588/rknpu_env_py310")
+        print_bold("  /usr/local/python3.10/bin/python3.10 -m venv /home/seeed/test_file_RK3588/rknpu_env_py310")
+        print_bold("然后重新运行本脚本。")
+    else:
+        # Python 3.10 未安装，需要完整安装
+        print_info("系统未安装 Python 3.10，需要完整安装。")
+        source_build_python_instructions()
+    sys.exit(1)
+
 def scan_extra_venvs():
     extra = []
     try:
@@ -219,18 +276,7 @@ def activate_venv():
         if check_python_health(venv_python):
             switch_to_venv(venv_python)
         else:
-            print_section("虚拟环境中的 Python 解释器无法运行")
-            print_warn(f"解释器 '{venv_python}' 存在，但无法正确执行 Python 代码。")
-            print_info("这通常是因为 Python 编译时缺少 libffi-dev 导致 _ctypes 模块缺失。")
-            print_bold("请重新编译 Python 3.10.15：")
-            print_bold("  sudo apt update && sudo apt install -y libffi-dev")
-            print_bold("  cd /tmp/Python-3.10.15")
-            print_bold("  ./configure --enable-optimizations --prefix=/usr/local/python3.10")
-            print_bold("  make -j$(nproc) && sudo make install")
-            print_bold("  rm -rf /home/seeed/test_file_RK3588/rknpu_env_py310")
-            print_bold("  /usr/local/python3.10/bin/python3.10 -m venv /home/seeed/test_file_RK3588/rknpu_env_py310")
-            print_bold("然后重新运行本脚本。")
-            sys.exit(1)
+            handle_venv_python_broken(venv_python)
 
     # 2. 查找任意有效虚拟环境
     all_venv_dirs = list(dict.fromkeys(POSSIBLE_VENVS + scan_extra_venvs()))
@@ -241,20 +287,26 @@ def activate_venv():
             print_warn(f"找到虚拟环境 '{venv_dir}'，正在自动激活...")
             switch_to_venv(python_bin)
         else:
-            print_section("虚拟环境中的 Python 解释器无法运行")
-            print_warn(f"解释器 '{python_bin}' 存在，但无法正确执行 Python 代码。")
-            print_bold("请重新编译 Python 3.10.15（确保安装 libffi-dev）：")
-            print_bold("  sudo apt update && sudo apt install -y libffi-dev")
-            print_bold("  cd /tmp/Python-3.10.15 && ./configure --enable-optimizations --prefix=/usr/local/python3.10 && make -j$(nproc) && sudo make install")
-            print_bold("  rm -rf /home/seeed/test_file_RK3588/rknpu_env_py310")
-            print_bold("  /usr/local/python3.10/bin/python3.10 -m venv /home/seeed/test_file_RK3588/rknpu_env_py310")
-            print_bold("然后重新运行本脚本。")
-            sys.exit(1)
+            handle_venv_python_broken(python_bin)
 
     # 3. 检查是否存在 python3 文件但缺少执行权限
     for venv_dir in all_venv_dirs:
         py_path = os.path.join(venv_dir, "bin", "python3")
         if os.path.isfile(py_path):
+            if not is_python_binary_real(py_path):
+                if is_python310_installed():
+                    # Python 3.10 已安装，只需重建虚拟环境
+                    print_info(f"文件 '{py_path}' 存在，但其指向的 Python 二进制文件不存在。")
+                    print_info("但系统已安装 Python 3.10，只需重建虚拟环境即可。")
+                    print_bold("请执行以下命令重建虚拟环境：")
+                    print_bold(f"  rm -rf {venv_dir}")
+                    print_bold(f"  /usr/local/python3.10/bin/python3.10 -m venv {venv_dir}")
+                    print_bold("然后重新运行本脚本。")
+                else:
+                    print_info(f"文件 '{py_path}' 存在，但其指向的 Python 二进制文件不存在。")
+                    print_info("这表明 Python 3.10 未被正确安装或已被移除。")
+                    source_build_python_instructions()
+                sys.exit(1)
             print_section("虚拟环境已存在但 Python 无执行权限")
             print_warn(f"文件 '{py_path}' 存在，但缺少可执行权限。")
             print_bold("请执行以下命令修复权限：")
@@ -271,19 +323,27 @@ def activate_venv():
             required_ver = parse_cp_tag(cp_match.group(0))
             if required_ver:
                 python_bin = f"python{required_ver}"
-                if shutil.which(python_bin):
+                if shutil.which(python_bin) or (required_ver == "3.10" and is_python310_installed()):
                     print_bold(f"检测到系统已安装 Python {required_ver}，请创建虚拟环境：")
                     venv_name = f"rknpu_env_py{required_ver.replace('.', '')}"
-                    print_bold(f"  {python_bin} -m venv /home/seeed/{venv_name}")
+                    # 如果 python3.10 不在 PATH，使用完整路径
+                    cmd = python_bin if shutil.which(python_bin) else "/usr/local/python3.10/bin/python3.10"
+                    print_bold(f"  {cmd} -m venv /home/seeed/{venv_name}")
                     print_bold(f"  source /home/seeed/{venv_name}/bin/activate")
                     print_bold("然后重新运行本脚本。")
                 else:
                     print_bold(f"本地 wheel 包需要 Python {required_ver}，但系统未安装。")
                     source_build_python_instructions()
                 sys.exit(1)
-    # 通用方案：源码编译 Python 3.10.15
-    print_bold("建议源码编译安装 Python 3.10.15（已适配 RK3588）。")
-    source_build_python_instructions()
+    # 通用方案：检查 Python 3.10 是否已安装
+    if is_python310_installed():
+        print_bold("系统已安装 Python 3.10，只需创建虚拟环境即可：")
+        print_bold("  /usr/local/python3.10/bin/python3.10 -m venv /home/seeed/rknpu_env_py310")
+        print_bold("  source /home/seeed/rknpu_env_py310/bin/activate")
+        print_bold("然后重新运行本脚本。")
+    else:
+        print_bold("建议源码编译安装 Python 3.10.15（已适配 RK3588）。")
+        source_build_python_instructions()
     sys.exit(1)
 
 # ================= RKNN wheel 安装相关 =================

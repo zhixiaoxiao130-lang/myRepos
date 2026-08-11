@@ -27,7 +27,7 @@ RUNTIME=30
 # ---------- 依赖检查 ----------
 check_cmd() {
     local missing=""
-    for cmd in fio jq iostat bc lspci mount umount lsblk dd; do
+    for cmd in fio jq iostat bc lspci mount umount lsblk dd parted partprobe mkfs.ext4 sgdisk; do
         if ! command -v "$cmd" &>/dev/null; then
             missing="$missing $cmd"
         fi
@@ -35,7 +35,7 @@ check_cmd() {
     if [ -n "$missing" ]; then
         echo "❌ 缺少依赖: $missing"
         echo "请执行以下命令安装："
-        echo "  sudo apt update && sudo apt install -y fio jq sysstat bc pciutils util-linux"
+        echo "  sudo apt update && sudo apt install -y fio jq sysstat bc pciutils util-linux parted e2fsprogs gdisk"
         exit 1
     fi
     if ! fio --version &>/dev/null; then
@@ -46,6 +46,44 @@ check_cmd() {
 }
 
 check_cmd
+
+# ---------- 清理函数（trap EXIT 自动调用）----------
+PART_CREATED=0
+CLEANUP_PART_NUM=""
+CLEANUP_DONE=0
+
+do_cleanup() {
+    if [ "$CLEANUP_DONE" -eq 1 ]; then
+        return
+    fi
+    CLEANUP_DONE=1
+
+    # 卸载测试挂载点
+    if [ -n "$TEST_MOUNT" ] && mountpoint -q "$TEST_MOUNT" 2>/dev/null; then
+        umount "$TEST_MOUNT" 2>/dev/null
+    fi
+    rmdir "$TEST_MOUNT" 2>/dev/null
+
+    # 如果创建了测试分区，询问是否删除
+    if [ "$PART_CREATED" -eq 1 ] && [ -n "$CLEANUP_PART_NUM" ] && [ -n "$SELECTED_DEV_PATH" ]; then
+        echo ""
+        echo "┌─────────────────────────────────────────┐"
+        echo "│  测试分区 $PART_PATH 是本次测试创建的   │"
+        echo "│  删除后将恢复原始磁盘分区布局           │"
+        echo "└─────────────────────────────────────────┘"
+        read -p "是否删除测试分区 $PART_PATH？(Y/n): " DEL_PART
+        if [[ ! "$DEL_PART" =~ ^[Nn]$ ]]; then
+            echo "正在删除分区 $PART_PATH ..."
+            parted -s "$SELECTED_DEV_PATH" rm "$CLEANUP_PART_NUM" 2>/dev/null && \
+                echo "✅ 分区 $PART_PATH 已删除" || \
+                echo "⚠️ 删除分区失败，请手动处理: parted $SELECTED_DEV_PATH rm $CLEANUP_PART_NUM"
+        else
+            echo "保留分区 $PART_PATH"
+        fi
+    fi
+}
+
+trap do_cleanup EXIT
 
 # ---------- 1. 设备选择 ----------
 echo ""
@@ -89,13 +127,84 @@ SELECTED_DEV_PATH="/dev/$SELECTED_DEV"
 SELECTED_PCIE="${DEV_PCIE[$((CHOICE-1))]}"
 echo "已选择: $SELECTED_DEV_PATH (${SELECTED_PCIE})"
 
-# ---------- 2. 查找第一个分区 ----------
-PART=$(lsblk -nlo NAME "$SELECTED_DEV_PATH" 2>/dev/null | tail -n +2 | head -1)
-if [ -z "$PART" ]; then
-    echo "❌ 设备 $SELECTED_DEV_PATH 没有分区，无法挂载测试。"
-    exit 1
+# ---------- 2. 创建测试分区 ----------
+echo ""
+echo "┌─────────────────────────────────────────┐"
+echo "│  自动创建测试分区                        │"
+echo "│  在 SSD 未分配空间上创建临时测试分区     │"
+echo "│  测试完成后可选择自动删除                │"
+echo "└─────────────────────────────────────────┘"
+
+# 检测未分配空间
+FREE_START=$(parted -s "$SELECTED_DEV_PATH" unit s print free 2>/dev/null | grep "Free Space" | tail -1 | awk '{print $1}' | tr -d 's')
+DISK_SIZE_SECTORS=$(parted -s "$SELECTED_DEV_PATH" unit s print 2>/dev/null | grep "^Disk ${SELECTED_DEV_PATH}" | awk '{print $3}' | tr -d 's')
+
+# 检查是否有现有分区
+EXISTING_PARTS=$(lsblk -nlo NAME "$SELECTED_DEV_PATH" 2>/dev/null | tail -n +2)
+
+# 磁盘无分区时，从对齐位置开始
+if [ -z "$EXISTING_PARTS" ]; then
+    FREE_START=2048
 fi
-PART_PATH="/dev/$PART"
+
+if [ -n "$FREE_START" ] && [ "$FREE_START" -ge 2048 ] && [ -n "$DISK_SIZE_SECTORS" ]; then
+    FREE_SIZE_SECTORS=$((DISK_SIZE_SECTORS - FREE_START))
+    FREE_SIZE_GB=$(echo "scale=1; $FREE_SIZE_SECTORS * 512 / 1073741824" | bc)
+
+    if [ "${FREE_SIZE_GB%.*}" -ge 1 ]; then
+        echo "检测到未分配空间: ${FREE_SIZE_GB}GB"
+        read -p "是否创建测试分区？(Y/n): " CREATE_PART
+        if [[ ! "$CREATE_PART" =~ ^[Nn]$ ]]; then
+            echo "正在创建测试分区..."
+            # 修复 GPT 备份表位置（常见于镜像被写入更大磁盘的场景）
+            echo "  → 检查并修复 GPT 表..."
+            sgdisk -e "$SELECTED_DEV_PATH" 2>/dev/null
+            partprobe "$SELECTED_DEV_PATH" 2>/dev/null
+            sleep 1
+            # 重新获取可用空间起始位置（GPT 修复后可能变化）
+            FREE_START=$(parted -s "$SELECTED_DEV_PATH" unit s print free 2>/dev/null | grep "Free Space" | tail -1 | awk '{print $1}' | tr -d 's')
+            parted -s "$SELECTED_DEV_PATH" mkpart primary ext4 ${FREE_START}s 100%
+            if [ $? -ne 0 ]; then
+                echo "⚠️ 分区创建失败，回退到使用现有分区。"
+            else
+                partprobe "$SELECTED_DEV_PATH"
+                sleep 2
+                NEW_PART=$(lsblk -nlo NAME "$SELECTED_DEV_PATH" | tail -1)
+                PART_PATH="/dev/$NEW_PART"
+                PART_CREATED=1
+                CLEANUP_PART_NUM=$(echo "$NEW_PART" | grep -oP '\d+$')
+
+                echo "正在格式化 $PART_PATH 为 ext4 ..."
+                mkfs.ext4 -F "$PART_PATH" 2>/dev/null
+                if [ $? -ne 0 ]; then
+                    echo "❌ 格式化失败"
+                    parted -s "$SELECTED_DEV_PATH" rm "$CLEANUP_PART_NUM" 2>/dev/null
+                    PART_CREATED=0
+                    CLEANUP_PART_NUM=""
+                else
+                    echo "✅ 测试分区 $PART_PATH (${FREE_SIZE_GB}GB) 已就绪"
+                fi
+            fi
+        else
+            echo "跳过分区创建。"
+        fi
+    fi
+fi
+
+# 如果未创建新分区，回退到使用现有最大分区
+if [ "$PART_CREATED" -eq 0 ]; then
+    if [ -z "$EXISTING_PARTS" ]; then
+        echo "❌ 设备 $SELECTED_DEV_PATH 没有分区，且无法创建测试分区。"
+        exit 1
+    fi
+    PART=$(lsblk -nlo NAME,SIZE "$SELECTED_DEV_PATH" 2>/dev/null | tail -n +2 | sort -k2 -hr | head -1 | awk '{print $1}')
+    if [ -z "$PART" ]; then
+        echo "❌ 无法找到可用分区。"
+        exit 1
+    fi
+    PART_PATH="/dev/$PART"
+    echo "使用现有分区: $PART_PATH"
+fi
 
 if findmnt "$PART_PATH" &>/dev/null; then
     echo "❌ 分区 $PART_PATH 已经被挂载，请先卸载后再试。"
@@ -237,30 +346,39 @@ if [ "$TEST_TYPE" == "1" ]; then
     echo "  时间: $(date)" | tee -a "$DD_LOG"
     echo "========================================" | tee -a "$DD_LOG"
 
-    REQ_BYTES=$((5*1024*1024*1024))
+    # 动态计算测试大小：取可用空间80%与5GB的较小值，最小100MB
     AVAIL_BYTES=$(df -B1 --output=avail "$TEST_MOUNT" | tail -1)
-    if [ "$AVAIL_BYTES" -lt "$REQ_BYTES" ]; then
-        echo "❌ 可用空间不足 5GB" | tee -a "$DD_LOG"
+    MAX_TEST_BYTES=$((5*1024*1024*1024))
+    SAFE_BYTES=$(echo "$AVAIL_BYTES * 0.8 / 1" | bc)
+    if [ "$SAFE_BYTES" -lt $((100*1024*1024)) ]; then
+        echo "❌ 可用空间不足 100MB，无法测试" | tee -a "$DD_LOG"
         umount "$TEST_MOUNT"
         rmdir "$TEST_MOUNT" 2>/dev/null
         exit 1
     fi
+    if [ "$SAFE_BYTES" -gt "$MAX_TEST_BYTES" ]; then
+        TEST_COUNT=5120
+    else
+        TEST_COUNT=$(echo "$SAFE_BYTES / 1048576" | bc)
+    fi
+    TEST_SIZE_GB=$(echo "scale=1; $TEST_COUNT / 1024" | bc)
+    echo "可用空间: $(df -h --output=avail "$TEST_MOUNT" | tail -1 | tr -d ' '), 测试大小: ${TEST_SIZE_GB}GB" | tee -a "$DD_LOG"
 
-    echo "▶ 写入测试中 (5GB) ..." | tee -a "$DD_LOG"
+    echo "▶ 写入测试中 (${TEST_SIZE_GB}GB) ..." | tee -a "$DD_LOG"
     sync
     WRITE_START=$(date +%s%N)
-    dd if=/dev/zero of="$TEST_FILE" bs=1M count=5120 oflag=direct conv=fdatasync 2>&1 | tee -a "$DD_LOG"
+    dd if=/dev/zero of="$TEST_FILE" bs=1M count=$TEST_COUNT oflag=direct conv=fdatasync 2>&1 | tee -a "$DD_LOG"
     WRITE_END=$(date +%s%N)
     WRITE_TIME=$(echo "scale=2; ($WRITE_END - $WRITE_START) / 1000000000" | bc)
-    WRITE_SPEED=$(echo "scale=2; 5120 / $WRITE_TIME" | bc)
+    WRITE_SPEED=$(echo "scale=2; $TEST_COUNT / $WRITE_TIME" | bc)
 
-    echo "▶ 读取测试中 (5GB) ..." | tee -a "$DD_LOG"
+    echo "▶ 读取测试中 (${TEST_SIZE_GB}GB) ..." | tee -a "$DD_LOG"
     sync
     READ_START=$(date +%s%N)
     dd if="$TEST_FILE" of=/dev/null bs=1M iflag=direct 2>&1 | tee -a "$DD_LOG"
     READ_END=$(date +%s%N)
     READ_TIME=$(echo "scale=2; ($READ_END - $READ_START) / 1000000000" | bc)
-    READ_SPEED=$(echo "scale=2; 5120 / $READ_TIME" | bc)
+    READ_SPEED=$(echo "scale=2; $TEST_COUNT / $READ_TIME" | bc)
 
     echo "" | tee -a "$DD_LOG"
     echo "═══ 测试结果 ═══" | tee -a "$DD_LOG"
@@ -284,13 +402,19 @@ if [ "$TEST_TYPE" == "2" ]; then
     > "$CPU_LOG"
     > "$IOSTAT_LOG"
 
-    SIZE_BYTES=$(echo "$SIZE" | sed 's/G/*1073741824/; s/M/*1048576/; s/K/*1024/' | bc)
+    # 动态调整测试大小：取可用空间80%与配置SIZE的较小值
+    CFG_SIZE_BYTES=$(echo "$SIZE" | sed 's/G/*1073741824/; s/M/*1048576/; s/K/*1024/' | bc)
     AVAIL_BYTES=$(df -B1 --output=avail "$TEST_MOUNT" | tail -1)
-    if [ "$AVAIL_BYTES" -lt "$SIZE_BYTES" ]; then
-        echo "❌ 可用空间不足 $SIZE" | tee -a "$FIO_LOG"
+    SAFE_SIZE_BYTES=$(echo "$AVAIL_BYTES * 0.8 / 1" | bc)
+    if [ "$SAFE_SIZE_BYTES" -lt $((100*1024*1024)) ]; then
+        echo "❌ 可用空间不足 100MB" | tee -a "$FIO_LOG"
         umount "$TEST_MOUNT"
         rmdir "$TEST_MOUNT" 2>/dev/null
         exit 1
+    fi
+    if [ "$SAFE_SIZE_BYTES" -lt "$CFG_SIZE_BYTES" ]; then
+        SIZE="$(echo "$SAFE_SIZE_BYTES / 1073741824" | bc)G"
+        echo "⚠️ 可用空间不足，测试大小自动调整为 $SIZE" | tee -a "$FIO_LOG"
     fi
 
     TEST_FILE="${TEST_MOUNT}/fio_testfile"
@@ -464,8 +588,28 @@ if [ "$TEST_TYPE" == "3" ]; then
     analyze_full "$total_mb" "$elapsed" "$avg_speed"
 fi
 
-# ---------- 卸载 ----------
-umount "$TEST_MOUNT" && echo "卸载成功" || echo "卸载失败，请手动卸载 $TEST_MOUNT"
+# ---------- 卸载与清理 ----------
+umount "$TEST_MOUNT" 2>/dev/null && echo "卸载成功" || echo "卸载失败，请手动卸载 $TEST_MOUNT"
 rmdir "$TEST_MOUNT" 2>/dev/null
+
+# 如果创建了测试分区，询问是否删除（正常退出路径）
+if [ "$PART_CREATED" -eq 1 ] && [ -n "$CLEANUP_PART_NUM" ] && [ "$CLEANUP_DONE" -eq 0 ]; then
+    echo ""
+    echo "┌─────────────────────────────────────────┐"
+    echo "│  测试分区 $PART_PATH 是本次测试创建的   │"
+    echo "│  删除后将恢复原始磁盘分区布局           │"
+    echo "└─────────────────────────────────────────┘"
+    read -p "是否删除测试分区 $PART_PATH？(Y/n): " DEL_PART
+    if [[ ! "$DEL_PART" =~ ^[Nn]$ ]]; then
+        echo "正在删除分区 $PART_PATH ..."
+        parted -s "$SELECTED_DEV_PATH" rm "$CLEANUP_PART_NUM" 2>/dev/null && \
+            echo "✅ 分区 $PART_PATH 已删除" || \
+            echo "⚠️ 删除分区失败，请手动处理: parted $SELECTED_DEV_PATH rm $CLEANUP_PART_NUM"
+    else
+        echo "保留分区 $PART_PATH"
+    fi
+    CLEANUP_DONE=1
+fi
+
 echo ""
 echo "测试全部完成。"
